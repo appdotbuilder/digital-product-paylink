@@ -1,24 +1,45 @@
 
+import { db } from '../db';
+import { paymentLinksTable } from '../db/schema';
 import { type UploadPaymentProofInput, type PaymentLink } from '../schema';
+import { eq } from 'drizzle-orm';
 
-export async function uploadPaymentProof(input: UploadPaymentProofInput): Promise<PaymentLink> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is updating payment link with buyer info and payment proof.
-    // Should update status to 'uploaded', store buyer details and payment proof URL.
-    // Should validate that payment link exists and is in 'pending' status.
-    return Promise.resolve({
-        id: 0,
-        product_id: 1,
-        unique_code: input.payment_link_code,
+export const uploadPaymentProof = async (input: UploadPaymentProofInput): Promise<PaymentLink> => {
+  try {
+    // First, find the payment link by unique code
+    const existingPaymentLinks = await db.select()
+      .from(paymentLinksTable)
+      .where(eq(paymentLinksTable.unique_code, input.payment_link_code))
+      .execute();
+
+    if (existingPaymentLinks.length === 0) {
+      throw new Error('Payment link not found');
+    }
+
+    const existingPaymentLink = existingPaymentLinks[0];
+
+    // Validate that payment link is in 'pending' status
+    if (existingPaymentLink.status !== 'pending') {
+      throw new Error('Payment link is not in pending status');
+    }
+
+    // Update payment link with buyer info and payment proof
+    const result = await db.update(paymentLinksTable)
+      .set({
         buyer_name: input.buyer_name,
         buyer_email: input.buyer_email,
-        status: 'uploaded',
         payment_proof_url: input.payment_proof_url,
-        payment_instructions: 'Transfer ke Bank BCA 1234567890 a.n. Toko Digital',
-        expires_at: new Date(),
-        confirmed_at: null,
-        download_token: null,
-        created_at: new Date(),
+        status: 'uploaded',
         updated_at: new Date()
-    } as PaymentLink);
-}
+      })
+      .where(eq(paymentLinksTable.unique_code, input.payment_link_code))
+      .returning()
+      .execute();
+
+    const updatedPaymentLink = result[0];
+    return updatedPaymentLink;
+  } catch (error) {
+    console.error('Upload payment proof failed:', error);
+    throw error;
+  }
+};

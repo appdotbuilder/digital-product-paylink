@@ -1,9 +1,24 @@
 
+import { db } from '../db';
+import { productsTable } from '../db/schema';
 import { type Product } from '../schema';
+import { desc, asc } from 'drizzle-orm';
 
 export async function getProducts(): Promise<Product[]> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is fetching all products from the database.
-    // Should return list of all products with proper sorting (active first, then by creation date).
-    return Promise.resolve([]);
+  try {
+    // Fetch all products, ordered by active status first, then by creation date (newest first)
+    const results = await db.select()
+      .from(productsTable)
+      .orderBy(desc(productsTable.is_active), desc(productsTable.created_at))
+      .execute();
+
+    // Convert numeric fields back to numbers before returning
+    return results.map(product => ({
+      ...product,
+      price: parseFloat(product.price) // Convert string back to number
+    }));
+  } catch (error) {
+    console.error('Failed to fetch products:', error);
+    throw error;
+  }
 }

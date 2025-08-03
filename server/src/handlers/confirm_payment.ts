@@ -1,24 +1,49 @@
 
+import { db } from '../db';
+import { paymentLinksTable } from '../db/schema';
 import { type ConfirmPaymentInput, type PaymentLink } from '../schema';
+import { eq } from 'drizzle-orm';
+import { randomBytes } from 'crypto';
 
 export async function confirmPayment(input: ConfirmPaymentInput): Promise<PaymentLink> {
-    // This is a placeholder declaration! Real code should be implemented here.
-    // The goal of this handler is confirming payment by admin and generating download token.
-    // Should update status to 'confirmed', set confirmed_at timestamp, and generate download token.
-    // Should validate that payment link exists and is in 'uploaded' status.
-    return Promise.resolve({
-        id: input.payment_link_id,
-        product_id: 1,
-        unique_code: 'DUMMY123',
-        buyer_name: 'John Doe',
-        buyer_email: 'john@example.com',
+  try {
+    // First, check if payment link exists and is in 'uploaded' status
+    const existingPaymentLinks = await db.select()
+      .from(paymentLinksTable)
+      .where(eq(paymentLinksTable.id, input.payment_link_id))
+      .execute();
+
+    if (existingPaymentLinks.length === 0) {
+      throw new Error('Payment link not found');
+    }
+
+    const paymentLink = existingPaymentLinks[0];
+
+    if (paymentLink.status !== 'uploaded') {
+      throw new Error(`Cannot confirm payment with status '${paymentLink.status}'. Payment must be in 'uploaded' status.`);
+    }
+
+    // Generate secure download token
+    const downloadToken = randomBytes(32).toString('hex');
+
+    // Update payment link to confirmed status
+    const result = await db.update(paymentLinksTable)
+      .set({
         status: 'confirmed',
-        payment_proof_url: 'https://example.com/proof.jpg',
-        payment_instructions: 'Transfer ke Bank BCA 1234567890 a.n. Toko Digital',
-        expires_at: new Date(),
         confirmed_at: new Date(),
-        download_token: 'download_token_123', // Should generate secure random token
-        created_at: new Date(),
+        download_token: downloadToken,
         updated_at: new Date()
-    } as PaymentLink);
+      })
+      .where(eq(paymentLinksTable.id, input.payment_link_id))
+      .returning()
+      .execute();
+
+    const updatedPaymentLink = result[0];
+
+    // Return the updated payment link (no numeric conversions needed for PaymentLink)
+    return updatedPaymentLink;
+  } catch (error) {
+    console.error('Payment confirmation failed:', error);
+    throw error;
+  }
 }
